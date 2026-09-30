@@ -1,6 +1,5 @@
 import frappe
 import frappe.sessions
-from frappe.utils.change_log import get_versions
 
 # Origins the bundled app runs from: WKWebView on iOS, the Android WebView.
 APP_ORIGINS = ("capacitor://localhost", "https://localhost")
@@ -45,13 +44,13 @@ def app_boot():
 	load_translations(bootinfo)
 	bootinfo.lang = str(bootinfo.lang)
 	load_conf_settings(bootinfo)
-	bootinfo.versions = {app: info["version"] for app, info in get_versions().items()}
+	apps = frappe.get_installed_apps(_ensure_on_bench=True)
+	# Only the version numbers: get_versions also asks git for every app's branch on each call.
+	bootinfo.versions = {app: getattr(frappe.get_module(app), "__version__", "0.0.1") for app in apps}
 	# Only the titles the About panel shows; Desk's app_data also builds every app's dock.
-	bootinfo.app_data = [
-		{"app_name": app, "app_title": app_title(app)} for app in frappe.get_installed_apps()
-	]
-	# The hooks frappe.sessions.get runs on every boot; Raven's own fields come from one of them.
-	for hook in frappe.get_hooks("extend_bootinfo"):
+	bootinfo.app_data = [{"app_name": app, "app_title": app_title(app)} for app in apps]
+	# Only Raven's hooks: another app's hook may expect Desk fields this partial boot leaves out.
+	for hook in frappe.get_hooks("extend_bootinfo", app_name="raven"):
 		frappe.get_attr(hook)(bootinfo=bootinfo)
 	return bootinfo
 
